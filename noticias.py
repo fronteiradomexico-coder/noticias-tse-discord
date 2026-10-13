@@ -5,7 +5,7 @@ import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-WEBHOOK = os.environ.get("https://discord.com/api/webhooks/1559362537898770492/4OwrX_V3RwVvKWDEKoCTj-ELOuw9BSTgC1UfTdQ_yGwzKoxF9kUaEZnG4q8Gp6MvMWmf")
+WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
 RSS_URL = "https://www.tse.jus.br/noticias-em-rss"
 
 if not WEBHOOK:
