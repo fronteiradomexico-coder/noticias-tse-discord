@@ -1,9 +1,9 @@
 name: Notícias do TSE para Discord
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,10 +21,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar dependências
-        run: pip install requests feedparser
-
-      - name: Executar notícias
+      - name: Executar monitor de notícias
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python noticias.py
