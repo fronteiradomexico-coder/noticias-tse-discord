@@ -8,10 +8,11 @@ from urllib.parse import quote
 
 WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
 
-# Feed principal e alternativa
 RSS_URLS = [
     "https://www.tse.jus.br/noticias-em-rss",
-    "https://news.google.com/rss/search?q=" + quote("site:tse.jus.br notícias") + "&hl=pt-BR&gl=BR&ceid=BR:pt-419",
+    "https://news.google.com/rss/search?q="
+    + quote("site:tse.jus.br notícias")
+    + "&hl=pt-BR&gl=BR&ceid=BR:pt-419",
 ]
 
 HISTORICO = "noticias_enviadas.json"
@@ -21,22 +22,29 @@ def buscar_rss(url):
     req = urllib.request.Request(
         url,
         headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 Chrome/131.0 Safari/537.36"
-            ),
+            "User-Agent": "Mozilla/5.0 (compatible; NoticiasTSEBot/1.0)",
             "Accept": "application/rss+xml, application/xml, text/xml, */*",
         },
     )
 
     with urllib.request.urlopen(req, timeout=30) as resposta:
-        conteudo = resposta.read()
+        xml = resposta.read()
 
-    raiz = ET.fromstring(conteudo)
+    raiz = ET.fromstring(xml)
     return raiz.findall(".//item")
 
 
 def enviar_discord(titulo, link, descricao):
+    if not WEBHOOK:
+        raise RuntimeError(
+            "Configure DISCORD_WEBHOOK em Settings > Secrets and variables > Actions."
+        )
+
+    if "discord.com/api/webhooks/" not in WEBHOOK:
+        raise RuntimeError(
+            "O segredo DISCORD_WEBHOOK não parece conter um webhook válido."
+        )
+
     embed = {
         "title": titulo[:256],
         "url": link,
@@ -54,46 +62,65 @@ def enviar_discord(titulo, link, descricao):
     req = urllib.request.Request(
         WEBHOOK,
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "NoticiasTSEBot/1.0",
+        },
         method="POST",
     )
 
-    with urllib.request.urlopen(req, timeout=20) as resposta:
-        if resposta.status not in (200, 204):
-            raise RuntimeError(f"Discord respondeu: {resposta.status}")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resposta:
+            print(f"Discord respondeu: HTTP {resposta.status}")
+    except urllib.error.HTTPError as erro:
+        detalhes = erro.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Erro do Discord: HTTP {erro.code}. "
+            f"Resposta: {detalhes[:1000]}"
+        ) from erro
+
+
+def carregar_historico():
+    try:
+        with open(HISTORICO, "r", encoding="utf-8") as arquivo:
+            return set(json.load(arquivo))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+
+def salvar_historico(enviados):
+    with open(HISTORICO, "w", encoding="utf-8") as arquivo:
+        json.dump(
+            sorted(enviados),
+            arquivo,
+            ensure_ascii=False,
+            indent=2,
+        )
 
 
 def main():
-    if not WEBHOOK:
-        raise RuntimeError(
-            "Configure o segredo DISCORD_WEBHOOK em Settings > Secrets and variables > Actions."
-        )
-
-    enviados = set()
-
-    try:
-        with open(HISTORICO, "r", encoding="utf-8") as arquivo:
-            enviados = set(json.load(arquivo))
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-
+    enviados = carregar_historico()
     itens = None
 
     for url in RSS_URLS:
         try:
             itens = buscar_rss(url)
-            print(f"Feed acessado: {url}")
+            print(f"Feed acessado com sucesso: {url}")
             break
-        except (urllib.error.URLError, ET.ParseError, TimeoutError) as erro:
-            print(f"Falha no feed {url}: {erro}")
+        except (
+            urllib.error.URLError,
+            ET.ParseError,
+            TimeoutError,
+        ) as erro:
+            print(f"Falha ao acessar feed: {erro}")
 
     if itens is None:
-        raise RuntimeError("Não foi possível acessar nenhum feed de notícias.")
+        raise RuntimeError("Não foi possível acessar nenhum feed.")
 
     novos = 0
 
     for item in reversed(itens):
-        titulo = item.findtext("title", default="Notícia").strip()
+        titulo = item.findtext("title", default="Notícia eleitoral").strip()
         link = item.findtext("link", default="").strip()
         descricao = item.findtext("description", default="").strip()
 
@@ -101,14 +128,14 @@ def main():
             continue
 
         enviar_discord(titulo, link, descricao)
+
         enviados.add(link)
+        salvar_historico(enviados)
         novos += 1
+
         print(f"Notícia enviada: {titulo}")
 
-    with open(HISTORICO, "w", encoding="utf-8") as arquivo:
-        json.dump(sorted(enviados), arquivo, ensure_ascii=False, indent=2)
-
-    print(f"Concluído. Novas notícias enviadas: {novos}")
+    print(f"Execução concluída. Notícias novas enviadas: {novos}")
 
 
 if __name__ == "__main__":
