@@ -15,7 +15,6 @@ concurrency:
 
 jobs:
   publicar-noticias:
-    name: Buscar e publicar notícias
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -33,7 +32,7 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python noticias.py
 
-      - name: Salvar histórico no GitHub
+      - name: Salvar histórico
         if: success()
         run: |
           git config user.name "github-actions[bot]"
@@ -43,5 +42,5 @@ jobs:
             git commit -m "Atualizar histórico de notícias"
             git push
           else
-            echo "Histórico sem alterações."
+            echo "Nenhuma alteração no histórico."
           fi
